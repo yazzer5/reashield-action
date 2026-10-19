@@ -1,0 +1,49 @@
+name: Test the action
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Readable fixture passes a low bar
+        id: low
+        uses: ./
+        with:
+          path: test/fixture-app
+          min-score: "20"
+
+      - name: Readable fixture fails a high bar
+        id: high
+        continue-on-error: true
+        uses: ./
+        with:
+          path: test/fixture-app
+          min-score: "60"
+
+      - name: Empty folder fails instead of passing
+        id: empty
+        continue-on-error: true
+        uses: ./
+        with:
+          path: test/does-not-exist
+
+      - name: Check outcomes
+        shell: bash
+        run: |
+          echo "low:   ${{ steps.low.outcome }} score=${{ steps.low.outputs.score }} grade=${{ steps.low.outputs.grade }}"
+          echo "high:  ${{ steps.high.outcome }}"
+          echo "empty: ${{ steps.empty.outcome }}"
+          test "${{ steps.low.outcome }}" = "success"
+          test "${{ steps.low.outputs.score }}" = "26"
+          test "${{ steps.high.outcome }}" = "failure"
+          test "${{ steps.empty.outcome }}" = "failure"

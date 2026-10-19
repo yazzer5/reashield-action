@@ -1,0 +1,76 @@
+name: REAShield exposure gate
+description: Score how easily an AI agent can reverse-engineer your JavaScript or Electron app, and fail the check when the score is below your minimum.
+author: REAShield
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  path:
+    description: Folder to score, usually your built app (for example dist, out, or the unpacked app.asar folder).
+    required: true
+  min-score:
+    description: Fail the check when the protection score (0 to 100, higher is better) is below this.
+    required: false
+    default: "60"
+  harden:
+    description: Pro. Set to "true" to harden the app first and score the hardened build. Needs license-key.
+    required: false
+    default: "false"
+  license-key:
+    description: Your REAShield Pro license key. Store it as a repository secret. Only used when harden is "true".
+    required: false
+    default: ""
+  output:
+    description: Where the hardened build is written when harden is "true".
+    required: false
+    default: ".reashield-hardened"
+  cli-url:
+    description: Where to install the REAShield CLI from.
+    required: false
+    default: "https://reashield.q-axiom.com.au/reashield-0.1.0.tgz"
+
+outputs:
+  score:
+    description: Protection score, 0 to 100.
+    value: ${{ steps.gate.outputs.score }}
+  grade:
+    description: Letter grade, A to F.
+    value: ${{ steps.gate.outputs.grade }}
+  scanned-path:
+    description: The folder that was scored (the hardened build when harden is "true").
+    value: ${{ steps.gate.outputs.scanned-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install REAShield CLI
+      shell: bash
+      env:
+        CLI_URL: ${{ inputs.cli-url }}
+      run: |
+        node -e "const m=+process.versions.node.split('.')[0]; if (m < 18) { console.error('REAShield needs Node 18 or newer; add actions/setup-node before this step.'); process.exit(1) }"
+        npm install -g "$CLI_URL" --no-audit --no-fund --loglevel=error
+
+    - name: Harden (Pro)
+      if: inputs.harden == 'true'
+      shell: bash
+      env:
+        APP_PATH: ${{ inputs.path }}
+        OUT_PATH: ${{ inputs.output }}
+        REASHIELD_KEY: ${{ inputs.license-key }}
+      run: |
+        if [ -z "$REASHIELD_KEY" ]; then
+          echo "::error::harden is true but license-key is empty. Add your key as a repository secret and pass it as license-key."
+          exit 1
+        fi
+        reashield activate "$REASHIELD_KEY"
+        reashield harden "$APP_PATH" -o "$OUT_PATH"
+
+    - name: Score and gate
+      id: gate
+      shell: bash
+      env:
+        APP_PATH: ${{ inputs.harden == 'true' && inputs.output || inputs.path }}
+        MIN_SCORE: ${{ inputs.min-score }}
+      run: node "$GITHUB_ACTION_PATH/gate.mjs"
