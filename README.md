@@ -19,7 +19,7 @@ jobs:
   exposure:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # ... build your app here, e.g. npm ci && npm run build
       - uses: yazzer5/reashield-action@v1
         with:
